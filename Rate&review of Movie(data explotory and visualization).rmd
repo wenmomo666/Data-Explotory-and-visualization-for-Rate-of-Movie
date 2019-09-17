@@ -1,0 +1,711 @@
+---
+title: "EDAV Final Project"
+output: html_document
+author: "Yiwen Zhang (yz3310), Yijia Chen (yc3425),Chengzhang Xu (cx2188),Sha Yu Han (sy2739),"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE,
+                      message = FALSE)
+```
+
+
+#1.Introduction: 
+
+    IMDB, known as Internet Movie Database, is an online database that collects information of world films, television programs, and videos including release year, director names, writer names, etc. IMDB has more than 60 million registered users that contribute to film comments and ratings. Given the dataset, we are looking into information of world movies in the past 5 years. We are particularly interested in what the preference of audience for the movie type is. We are also interested in learning ratings of movies, relationships between movie genres, and exploration of representative genre to study futher.We would later find out the relation between some attributes and movie ratings.
+ 
+    Team members: 
+    Yijia Chen (yc3425)— 2.Description of data 3.Analysis of Data Quality(60%)
+    Chengzhang Xu (cx2188)—4.Main analysis(40%)
+    Sha Yu Han (sy2739)—4. Main analysis(40%)  6.Interactive component
+    Yiwen Zhang (yz3310)— 1. Introduction  3.Analysis of Data Quality(40%) 4.Main analysis(20%) 5.Executive summary 6.Conclusion & Final formatting project
+
+
+
+#2.Description of Data
+
+    Github link to our dataset: 
+  <https://github.com/yijiacc/EDAV-Project>
+    
+    Dataset “imdb_movie.csv” is collected from IMDB database. The database refreshes daily and the data files can be accessed and downloaded from 
+  <https://datasets.imdbws.com/>. 
+    
+    There are 7 files in total, including movie basics, crews, ratings, director names, etc. Each of the file is super large, and is about 1GB. The earliest movie in the file dates back to 1892. Since the large size of original datasets, we focus on movies from year 2013-2017. We then inner-joined all data files into one single one and subset it to year 2013-2017.  “imdb_movie.csv” contains 34,946 observations as well as 13 variables, they are “tconst”, “title”, “releaseYear”, “runtimeMinutes”, “genres1”, “genres2”, “genres3”, “averageRating”, “numVotes”, “directorName”, “writerName”, “region”, “language”
+    Dataset “merge_movie.csv” contains box office information scraped from Box Office Mojo as well as all information from “imdb_movie.csv”.
+  <http://www.boxofficemojo.com/> 
+    
+    
+
+    Data Dictionary:
+    “tconst”, the distinct id for each movie
+    “title”, the name of movie
+    “releaseYear”, the year that a movie is released
+    “runtimeMinutes”, the length of a movie, measured in minutes
+    “genres1”, the genres related to the movie
+    “genres2”, the second genres related to the movie, can be null, but is not missing value
+    “genres3”, the thirf genres related to the movie, can be null, but is not missing value
+    “averageRating”, weighted average of all the individual IMDB user ratings 
+    “numVotes”, number of votes the movie is received
+    “directorName”, the name of director(s) of a given movie
+    “writerName”, the name of writer(s) of a given movie
+    “region”, the region for this version of movie
+    “language”, the language of the movie
+
+
+
+#3. Analysis of Data Quality
+
+```{r cars}
+#Libraries
+#install.packages("mi")
+library(mi)
+#install.packages("extracat")
+#install.packages("tm")
+library(extracat)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+library(tm)
+#devtools::install_github('hadley/ggplot2')
+#Load Data
+imdbmovie <- read.csv(file="imdb_movie.csv", header=TRUE, sep=",")
+```
+
+## a) Data Quality
+
+    The dataset from IMDB website contains all movies released from Year 2013-2017. It contains 34946 movies and 13 variables, including movie title, movie running time, averating ratings, director name, writer name, etc.
+
+    Overall, the dataset is pretty tidy and clean. Only two variables contain missing values. "Language" contains the majority of missing values, which about 95%, and "runtimeMinutes" contians the minority missing values, which about 5%. Other variables do not have missing values. 
+
+## b) Check Missing Values
+
+```{r echo=FALSE}
+#Check variable characteristics
+imdbmovie$runtimeMinutes<- as.numeric(as.character(imdbmovie$runtimeMinutes))
+imdbmovie$releaseYear <- as.factor(imdbmovie$releaseYear)
+imdbmovie$language[imdbmovie$language == "\\N"] <- NA
+movieimdb<-imdbmovie
+visna(imdbmovie, sort="b")
+```
+```{r}
+# Fill Missing Values
+levels(imdbmovie$language) <- c(levels(imdbmovie$language), "others")
+imdbmovie$language[is.na(imdbmovie$language)] <- "others"
+imdbmovie$runtimeMinutes[is.na(imdbmovie$runtimeMinutes)] <- mean(imdbmovie$runtimeMinutes, na.rm=TRUE)
+```
+
+## c) Check Outliers
+    
+    For outliers, we used box-plot to  check 2 numeric variables in the dataset, they are "runtimeMinutes" and "averageRatings". Both of the variables have many outliers, however, this could be normal for movie length and ratings, so we will keep all the outliers for further analysis. 
+
+    For "runtimeMinutes", the median is centered around 100, which means most movies have a lenghth of about 100 minutes. The longest movie, Chamissos Schatten, has a runtime longer than 700 minutes. The second longest movie, River of Fundament is about 320 minutes long. 
+
+    For "averageRating", the median is centered around 6.25. A few movies are rated above 8, and a few more movies are rated below 4. 
+
+    For the multivariate outliers, we plotted a density curve on the scatter plot and found most movies are out the density curve, which is also normal for our case. The overall trend in the scatter plot is that the highest-rated movie has a medium lenghth of runtime.  
+
+
+
+```{r}
+run_minute_box <- ggplot(imdbmovie, aes("RunTime Minutes",runtimeMinutes)) + geom_boxplot() + xlab("") + ylab("Movie Run time in Minutes")
+
+ratings_box <- ggplot(imdbmovie, aes("Average Ratings",averageRating)) + geom_boxplot() + xlab("") + ylab("Movies Average Ratings")
+
+ratings_scatter <- ggplot(imdbmovie, aes(runtimeMinutes, averageRating, label=title)) + geom_point() + xlab("runtimeMinutes") + ylab("Movie average ratings") + geom_density2d(bins=4, col="red") +geom_text(aes(label=ifelse(runtimeMinutes>=250,as.character(title),'')),hjust=0,vjust=0, size = 3)
+
+grid.arrange(arrangeGrob(run_minute_box, ratings_box, ratings_scatter, ncol=3, widths=c(1, 1, 4)))
+
+```
+
+
+
+#4.Main Analysis (Exploratory Data Analysis)
+
+```{r}
+library(tidyverse)
+library(DAAG)
+data=read.csv('totalmovie.csv')
+data2=read.csv('imdb_movie.csv')
+data2$language=NULL
+data2=data2[!duplicated(data2), ]
+```
+
+##Analysis of distribution properties of the dataset.
+
+```{r}
+
+#show directors, whose movies has average rating >9.5
+
+Director_rating=data2%>% 
+  group_by(directors=directorName) %>% 
+  summarize(rating=mean(averageRating))
+
+high_rating=Director_rating[Director_rating$rating>9.5,]
+ggplot(high_rating, aes(reorder(directors,-rating), rating)) + 
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(x = 'director names', y = 'movie average ratings', main = 'Top Movie Ratings by Director')
+
+```
+
+    From this figure, we could see all the directors whose movies with >9.5 rating. We could see the three directors has highest rating, Eric Ptah Herbert, Jana Papenbroock, and Luke Abaffy.
+   
+```{r}
+#show director of low rating(<2) movies
+low_rating=Director_rating[Director_rating$rating<2,]
+ggplot(low_rating, aes(reorder(directors,-rating),rating)) + 
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(x = 'director names', y = 'movie average ratings', main = 'Low Movie Ratings by Director')
+```
+
+    From this figure, we could see all the directors whose movies with rating under 2. The directors whose movie have lowest ratings are Kenji Tani and Naoyoshi Kawamatsu.
+    
+```{r}
+high_rating=data2[data2$averageRating>8.5,]
+Director_high=high_rating %>% 
+  group_by(directors=directorName) %>% 
+  summarize(count=n())
+set.seed(1234)
+library(wordcloud)
+layout(matrix(c(1,2), nrow=2), heights = c(1,5))
+par(mar = rep(0,4))
+plot.new()
+text(x=0.5, y=0.5, "Director Name Word Cloud Top Ratings")
+wordcloud(words = Director_high$directors, freq = Director_high$count, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"), main = "Title")
+```
+
+    This wordcloud shows the relative frequency of directors whose movies got rating 8.5+. As we can see, among movies with 8.5+ rating, Alper Caglar is the director who appears most frequent. Most directors have similar frequency.
+```{r}
+low_rating=data2[data2$averageRating<3,]
+Director_low=low_rating %>% 
+  group_by(directors=directorName) %>% 
+  summarize(count=n())
+set.seed(1234)
+library(wordcloud)
+layout(matrix(c(1,2), nrow=2), heights = c(1,5))
+par(mar = rep(0,4))
+plot.new()
+text(x=0.5, y=0.5, "Director Name Word Cloud Low Ratings")
+wordcloud(words = Director_low$directors, freq = Director_low$count, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"), main = "Title")
+```
+
+   The above wordcloud showing which directors always produce low-rating movie. As we can see, Mark Atkins and Luca Boni seems always produce movies with low rating.
+
+```{r}
+#distribution of Rating
+ggplot(data2, aes(x=averageRating)) + 
+  geom_histogram(aes(y=..density..),      
+                 binwidth=.5,
+                 colour="black", fill='white') +
+  geom_density(alpha=.2,fill="#F0E442")+
+  labs(x="Rating")
+```
+
+    The distribution of Rating can be regarded as a normal dirstribution.
+
+```{r}
+#distribution of Movie length
+data2$runtimeMinutes=as.numeric(data2$runtimeMinutes)
+data2_min100=data2[data2$runtimeMinutes<100,]
+data2_min101=data2[data2$runtimeMinutes>=100,]
+
+ggplot(data2_min100, aes(x=runtimeMinutes)) + 
+  geom_histogram(aes(y=..density..),      
+                 binwidth=.5,
+                 colour="black", fill='white') +
+  geom_density(alpha=.2,fill="#F0E442")
+```
+
+     We split the density historgram into two part for a better visualization. Above is movie lenth under 100 minutes, below is movie lenth over 100 minutes. We would see there is no obvious distribution pattern of runtimeMinutes(or we say movie length).
+
+```{r}
+ggplot(data2_min101, aes(x=runtimeMinutes)) + 
+  geom_histogram(aes(y=..density..),      
+                 binwidth=.5,
+                 colour="black", fill='white') +
+  geom_density(alpha=.2,fill="#F0E442")
+```
+```{r}
+#different 
+library(dplyr)
+genere_data=gather(data2, "genres_no", "genres", 5:7, na.rm = TRUE)
+time_genre=genere_data %>% 
+  group_by(years=releaseYear,genere=genres) %>% 
+  summarize(count=n())
+time_genre=time_genre[time_genre$count>200,]
+
+time_genre=time_genre[!time_genre$genere %in% c('','Drama','Comedy'),]
+ggplot(time_genre, aes(x=years,y=count,colour =genere)) + geom_line() +
+  ggtitle("genere")
+```
+
+     Compared with the amount of release of each genres, we could see from 2013 to 2017, there is a decresing trend of all genres generally. 
+
+```{r}
+merge_data=read.csv('merge_movie.csv')
+merge_data$gross_amount=as.numeric(gsub(',|[$]','',merge_data$gross_amount))
+high_gross=merge_data[merge_data$gross_amount>25067232,]
+Director=high_gross %>% 
+  group_by(directors=directorName) %>% 
+  summarize(count=n())
+set.seed(1234)
+library(wordcloud)
+layout(matrix(c(1,2), nrow=2), heights = c(1,5))
+par(mar = rep(0,4))
+plot.new()
+text(x=0.5, y=0.5, "Director Name Word Cloud High Box Office")
+wordcloud(words = Director$directors, freq = Director$count, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"), main = "Title")
+```
+
+    This wordcloud showing which directors' movies could bring higher ticket sales. As we can see, James Gunn brought highest ticket sales from 2013-2017.
+    
+```{r}
+merge_data$open_month=gsub('/[0-9]+','',merge_data$open_time)
+#monthly gross amount
+month_gs=merge_data %>% 
+  group_by(months=open_month) %>% 
+  summarize(gs=sum(gross_amount))
+month_gs$months=as.integer(month_gs$months)
+month_gs=month_gs[order(month_gs$months),]
+# 4year Monthly pattern
+ggplot(month_gs, aes(x=months,y=gs)) + geom_line(color='red') +
+  ggtitle("Sum of monthly ticket sales")+
+  scale_x_continuous(breaks =seq(1,12,1))
+```
+
+
+    Here we consider monthly patterns between 2013-2017. December has highest ticket sales. April has lowest amount.
+    
+```{r}
+movie <- read.csv("imdb_movie.csv", as.is = TRUE, header = TRUE, encoding = "UTF-8")
+total_movie <- read.csv("totalmovie.csv", as.is = TRUE, header = TRUE, encoding = "UTF-8")
+
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+# Tidy genres
+new_movie <- gather(movie, "genres_no", "genres", 5:7)
+new_movie <- new_movie[new_movie$genres != "", ]
+# levels(factor(new_movie$genres))        //check
+# levels(factor(new_movie$genres_no))     //check
+
+# For genres related topics, not related to Region and Language, below is the dataset
+movie_for_genres <- new_movie %>% distinct(new_movie, tconst, title, releaseYear, runtimeMinutes, averageRating, numVotes, directorName, writerName, genres_no, genres)
+
+# Replace "\\N" by "Others" according to the data source definition
+movie_for_genres$genres[movie_for_genres$genres == "\\N"] <- "Others"
+
+# levels(factor(movie_for_genres$genres)) //check
+```
+
+```{r, fig.width = 13, fig.height = 8, fig.align = 'center'}
+# Frequence by genres and region
+library(plotly)
+region <- new_movie %>% group_by(region) %>% summarize(Freq = n()) %>% arrange(desc(Freq))
+genres_feq <- movie_for_genres %>% group_by(genres) %>% summarize(Freq = n()) 
+region <- as.data.frame(region)
+region$region <- factor(region$region, levels = unique(region$region[order(-region$Freq)]))
+
+# By genres
+ggplot(genres_feq, aes(reorder(genres, -Freq), Freq)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Number of Movies by Genres", x = "Genres", y = "Number of Movies")
+
+# By region
+g_region <- ggplot(region[1:30, ], aes(region, Freq)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Top 30 Number of Movies by Region", x = "Genres", y = "Number of Movies")
+ggplotly(g_region, height = 400, width = 800)
+```
+
+
+
+    To have a better overview of our movie data, we try to explore the frequency of movies by genres and regions. What we are looking for is to see if there is a preference by movie producers in genres and if certain regions conribute a majority of movies production in these years. 
+    From the barcharts above, it is obvious that producers from US contribute much more movies than the rest of regions in the global market, following by Russian's. This is not unexpected considering the fact that the well-known Hollywood movie industry is in US and its mature movie industry chain. 
+    Producers certainly have a preference for Drama movies, almost doubling the number of follower Comedy movies. This might lead to a competitive Box office business in Drama genre. 
+
+```{r, fig.width = 13, fig.height = 8, fig.align = 'center'}
+# averageRating vs Year
+ggplot(data = movie_for_genres, aes(factor(releaseYear), averageRating, colour = factor(releaseYear))) +
+  geom_boxplot() + 
+  theme(legend.position = "none") +
+  labs(x = "Release Year", title = "Average Rating by Year", y = "Average Rating")
+```
+
+    Besides our interests in regions and genres, we also want to have a time series analysis to check if the average rating by audiences is time sensitive. The answer is no. We could not see any major differences on average rating between each year in the boxplot. The majority of average rating is in a close range and the median for each year is close to each other as well. There is similar variability in all five years.  
+
+```{r, fig.width = 13, fig.height = 8, fig.align = 'center'}
+# averageRating vs genres
+ggplot(data = movie_for_genres, aes(reorder(factor(genres), -averageRating, FUN = median), averageRating))+
+  geom_boxplot() + 
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Genres", y = "Average Rating", title = "Average Rating By Genre")
+```
+
+    After grouping by genres, we order the genres by their medians of average rating. The purpose is to see if certain genres have a overall better review from audiences, or we could say a higher reputation, among all kinds of genres. We could see that News and Documentary movies have generally higher average rating compared with movies under other genres. The reason is hard to inference from these boxplots. A reasonable guess is that movies under News and Documentary genres have a higher average quality.  
+
+```{r, fig.width = 13, fig.height = 10, fig.align = 'center'}
+# Confidence intervals for mean averageRating by year for each genres
+subdata3 <- movie_for_genres %>%
+        mutate(Year = factor(releaseYear, levels = c("2013", "2014", "2015", "2016", "2017"))) %>%
+        group_by(genres, releaseYear) %>%
+        summarise(N = n(), mean = mean(averageRating), sd = sd(averageRating), se = sd/sqrt(N))
+
+lims <- aes(ymax = mean + 2*se, ymin=mean - 2*se)
+
+ggplot(subdata3, aes(colour = factor(releaseYear), x = genres, y = mean)) +
+  geom_point() + 
+  geom_errorbar(lims, width=0.2) +
+  # ylim(10,70) + 
+  theme(legend.position = "bottom", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Confidence intervals for mean Average Rating by year for each genres", y = "Mean", x = "Genre") +
+  guides(color=guide_legend(title="Release Year"))
+```
+
+    To further explore our data with respect to average rating, genres and release year, we display the confidence intervars for average rating by year for each genre. After showing confidence intervals, it is obvious that there are clear differences between the genres and among the years within the genres. Adults and News, Sports and Western movies varies dramatically across years, indicating there might be time sensitive should be taken into consideration for future analysis.  
+
+```{r}
+library(plotly)
+# Scatterplot of averageRating and numVotes
+g <- ggplot(movie_for_genres, aes(x = averageRating, y = numVotes)) +
+  geom_point() +
+  labs(x = "Average Rating", y = "Number of Votes", title = "Average Rating vs Number of Votes")
+ggplotly(g)
+```
+
+    Intuitively, we think movies with higher average rating will generally have a larger volume of votes. To prove our guess, we use a scatterplot of average rating and number of votes to detect any potential correlation between the two variables. The two variables are correlated especially in a relative high range of average rating. There are significantly more movies who have high average ratings along with larger number of votes. We would like to further explore this correlation.    
+
+```{r}
+byGenres <- movie_for_genres %>% 
+  group_by(genres) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+ggplot(byGenres, aes(reorder(genres, -AvgVotes), AvgVotes)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Genres", y = "Average Votes per Movie", title = "Average Votes by Genre ")
+```
+
+    In additon to the total number of votes per genre, we find the average votes per movie is more representative and meaningful when analyzing averagely how many votes per movie are collected in each genre. Analysis on this variable excludes the influence from total number of movies produced in each genre. 
+    Adventure, Sci-Fi and Action movies have the top 3 largest average amount of votes per movie. It might be influenced by the fact that audiences who watch Adventure, Sci-Fi and Action have the tendency, or are more willingly, to write online review and rate the movie online, compared with audiences who watch movies under other genres. 
+
+```{r}
+byYear <- movie_for_genres %>% 
+  group_by(releaseYear) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+ggplot(byYear, aes(reorder(releaseYear, -AvgVotes), AvgVotes)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Release Year", y = "Average Votes", title = "Average Votes by Year")
+```
+
+    We also observe an interesting fact that there is a decreasing tendency of voting per movie throughout these years. In fact, the average amount of votes one movie could collect in 2017 is only about half of that in 2013. A future study could focus on analyzing what factors make influences on audiences' online behavior. 
+
+```{r, fig.width = 13, fig.height = 8, fig.align = 'center'}
+# Time series
+byYear_Genres <- movie_for_genres %>% 
+  group_by(genres, releaseYear) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+byYear_Genres <- as.data.frame(byYear_Genres)
+byYear_Genres$genres <- factor(byYear_Genres$genres)
+byYear_Genres$releaseYear <- factor(byYear_Genres$releaseYear)
+
+ggplot(byYear_Genres, aes(x = releaseYear, y = AvgVotes, colour = genres, group = genres)) + 
+  geom_line() +
+  labs(x = "Release Year", y = "Average Votes", title = "Annual flows of Average Votes for Movies under 25 Genres")
+
+# Together
+ggplot(byYear_Genres, aes(x = releaseYear, y = AvgVotes, group = genres)) + # , colour = genres
+  geom_line() +
+  theme(legend.position = "none") +
+  facet_wrap(~genres) +
+  labs(x = "Release Year", y = "Average Votes", title = "Annual flows of Average Votes for Movies under 25 Genres")
+```
+
+    The annual flow of average votes per movies follows the same rank when we do not include release year variable into the comparison. The top 3 genres which have the largest average amount of votes per movie were still Adventure, Sci-Fi and Action until 2016. In 2017, with a generally decreasing trend on online voting, Fantasy became the genre which had the largest average amount of votes per movie, beating Adventure, Sci-Fi and Action. We could also observe that the average amount of certain genres fluctuated dramatically acrossing these years. 
+    We would like to look into details about these trends, so we draw the same annual flow but drawn genres individually. The changes over time are easier to see than the previous plot and individual patterns are clearer.
+    We are more interested in movies under particular genres that induce a peak of average amount of votes per movie. This is because movies with such characteristics attract more audience to evaluate them and therefore have a higher business and market value. Following this idea, we focus on Musical movies in 2017, Fantasy movies in 2017, Sci-Fi movies in 2014, Adventure movies in 2014 and 2015, Western movies in 2013, and Animation movies in 2015. These genres stand out. We use interactive graph to look into details of these selected genres we are interested in. One logical explanation of these peaks is that they are caused by a single movie or some movies who receive an "outlier" type numbers of votes, extremely exceeding other movies under the same genre. Lots of audiences vote one single movie or some movies, which increases the overall average amount of votes per movie under its genre.
+    There are further analysis in section 6. Interactive Component.
+
+
+
+#5. Executive Summary (Presentation-style)
+
+    IMDB, known as Internet Movie Database, is an online database that collects information of world films, television programs, and videos including release year, director names, writer names, etc. IMDB has more than 60 million registered users that contribute to film comments and ratings. Given the dataset, we are particularly interested in looking for what the preference of audience for the movie type is. We are also interested in learning ratings of movies, relationships between movie genres, and exploration of representative genre to study futher.We would later find out the relation between some attributes and movie ratings.
+    We analyzed imdb_movies dataset from year 2013 to 2017; It contains 34,946 observations and 13 variables: “tconst”, “title”, “releaseYear”, “runtimeMinutes”, “genres1”, “genres2”, “genres3”, “averageRating”, “numVotes”, “directorName”, “writerName”, “region”, “language”.
+    
+    We identified some interesting and helpful insights after conducting data analysis: 
+    Firstly, the top-rated movies would generally have a high number of votes according to our data analysis results. This might because movies that receive more votes are more well-known than others. 
+    Secondly, for number of votes, there are a lot of outliers. Outliers are good in this case, because that means these movices receive more attention from audience. 
+    Thirdly, it is intuitive to see that movies in genres of Action, Adventures, Sci-fiction are still the most popular movie genres throughout 2013-2017. 
+
+
+###I Observe outliers:
+  
+```{r echo=FALSE}
+run_minute_box <- ggplot(imdbmovie, aes("RunTime Minutes",runtimeMinutes)) + geom_boxplot() + xlab("") + ylab("Movie Run time in Minutes")
+
+ratings_box <- ggplot(imdbmovie, aes("Average Ratings",averageRating)) + geom_boxplot() + xlab("") + ylab("Movies Average Ratings")
+
+ratings_scatter <- ggplot(imdbmovie, aes(runtimeMinutes, averageRating, label=title)) + geom_point() + xlab("runtimeMinutes") + ylab("Movie average ratings") + geom_density2d(bins=4, col="red") +geom_text(aes(label=ifelse(runtimeMinutes>=250,as.character(title),'')),hjust=0,vjust=0, size = 3)
+
+grid.arrange(arrangeGrob(run_minute_box, ratings_box, ratings_scatter, ncol=3, widths=c(1, 1, 4)))
+
+```
+
+     For outliers: use box-plot to check 2 numeric variables: "runtimeMinutes" and "averageRatings". Both of the variables have many outliers, however, this could be normal for movie length and ratings, so we will keep all the outliers for further analysis. 
+
+    For "runtimeMinutes", the median is centered around 100. The longest movie, Chamissos Schatten, has a runtime 700+ minutes. The second longest, River of Fundament is about 320 minutes long. 
+
+    For "averageRating", the median is centered around 6.25. A few movies are rated above 8, and a few more movies are rated below 4. 
+
+    For the multivariate outliers, we plotted a density curve on the scatter plot and found most movies are out the density curve, which is also normal for our case. The highest-rated movie has a medium lenghth of runtime.  
+
+
+###II Data Exploratary and Visualizations
+
+####1) Which directors's movies are at high-rating(8.5+)? 
+#####We showed the director names in the word cloud by top high-ratings:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+wordcloud(words = Director_high$directors, freq = Director_high$count, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"), main = "Word Cloud for Director Names by Ratings")
+```
+
+    Among movies with 8.5+ rating, Alper Caglar is the director who appears most frequent.
+
+
+
+####2) How do the movie genres change over year 2013-2017?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+ggplot(time_genre, aes(x=years,y=count,colour =genere)) + geom_line() +
+  ggtitle("genere")+ theme_grey(16)
+```
+
+    In general, the number of movies in each genre decrease over the year 2013-2017. Particularly, the number of action moives decreases the most among all genres. 
+
+
+####3) Is the distribution of Ratings has some pattern? 
+
+```{r echo=FALSE}
+#distribution of Rating
+ggplot(data2, aes(x=averageRating)) + 
+  geom_histogram(aes(y=..density..),      
+                 binwidth=.5,
+                 colour="black", fill='white') +
+  geom_density(alpha=.2,fill="#F0E442")+
+  labs(x="Rating")+ theme_grey(16)
+```
+
+    The distribution of average ratings is aprroximately a Normal Distribution, which means the data is good and does not have many extreme values. Its median is around 6.25. 
+    
+    
+    
+    
+####4) Is there any weekly pattern for ticket sales? 
+
+```{r echo=FALSE}
+ggplot(month_gs, aes(x=months,y=gs/1000000000)) + geom_line(color='red') +
+  ggtitle("Sum of monthly ticket sales")+
+  scale_x_continuous(breaks =seq(1,12,1))+ theme_grey(16)+labs(x = "Months", y = "Gross sales in billion dollors")
+```
+
+    There is no typical pattern in the monthly ticket sales. December, which is the end of a year, has highest ticket sales. This might because people may have more holidays than other months, so that they would have more time on movies. Whil April has the lowest ticket sales. It's interesting to see that sales of summer season July and August are lower than sales of December.  
+
+####5) What is the total amount of each genres? Which genre of movie has the most and least release amount? Which genre of movie has the most and least release amount in each Country? 
+
+```{r echo=FALSE, fig.align=13, fig.height=8, fig.width=16}
+# By genres
+ggplot(genres_feq, aes(reorder(genres, -Freq), Freq)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Number of Movies by Genres", x = "Genres", y = "Number of Movies")
+
+# By region
+g_region <- ggplot(region[1:30, ], aes(region, Freq)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Top 30 Number of Movies by Region", x = "Genres", y = "Number of Movies")
+ggplotly(g_region, height = 400, width = 800)
+
+```
+
+    Producers from US contribute much more movies than the rest of regions in the global market, following by Russian's. May be thanks to Hollywood Industry~
+    Producers have a preference for Drama movies, which might lead to a competitive Box office business in Drama genre. 
+
+
+
+####6) If the average rating by audiences is time sensitive?
+
+```{r echo=FALSE, fig.align=13, fig.height=8, fig.width=13}
+ggplot(data = movie_for_genres, aes(factor(releaseYear), averageRating, colour = factor(releaseYear))) +
+  geom_boxplot() + 
+  theme(legend.position = "none") +
+  labs(x = "Release Year", title = "Average Rating by Year", y = "Average Rating")
+
+```
+
+    No! There is not any major difference on average ratings between each year ( median, range, interquartile range).
+    
+    
+
+####7) If certain genres have overall better review from audiences？
+
+```{r echo=FALSE, fig.align=13, fig.height=8, fig.width=13}
+# averageRating vs genres
+ggplot(data = movie_for_genres, aes(reorder(factor(genres), -averageRating, FUN = median), averageRating))+
+  geom_boxplot() + 
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Genres", y = "Average Rating", title = "Average Rating By Genre")
+```
+    
+    News and Documentary movies have generally higher average rating than others. Any reason? just guess--News and Documentary genres have a higher average quality
+    
+    
+    
+####8) Find confidence intervals for average ratings by year for each genre
+
+```{r echo=FALSE, fig.align=13, fig.height=10, fig.width=13}
+# Confidence intervals for mean averageRating by year for each genres
+subdata3 <- movie_for_genres %>%
+        mutate(Year = factor(releaseYear, levels = c("2013", "2014", "2015", "2016", "2017"))) %>%
+        group_by(genres, releaseYear) %>%
+        summarise(N = n(), mean = mean(averageRating), sd = sd(averageRating), se = sd/sqrt(N))
+
+lims <- aes(ymax = mean + 2*se, ymin=mean - 2*se)
+
+ggplot(subdata3, aes(colour = factor(releaseYear), x = genres, y = mean)) +
+  geom_point() + 
+  geom_errorbar(lims, width=0.2) +
+  # ylim(10,70) + 
+  theme(legend.position = "bottom", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Confidence intervals for mean Average Rating by year for each genres", y = "Mean", x = "Genre") +
+  guides(color=guide_legend(title="Release Year"))
+```
+
+    There are clear differences between the genres and among the years within the genres. Adults and News, Sports and Western movies varies dramatically across years, indicating there might be time sensitive factor that should be taken into consideration for future analysis.  
+    
+
+####9) Do higher rating movies have larger volume of votes?
+
+```{r}
+library(plotly)
+# Scatterplot of averageRating and numVotes
+g <- ggplot(movie_for_genres, aes(x = averageRating, y = numVotes)) +
+  geom_point() +
+  labs(x = "Average Rating", y = "Number of Votes", title = "Average Rating vs Number of Votes")
+ggplotly(g)
+```
+
+    Average Rating and Number of Votes are correlated especially in a relative high range of average rating. 
+    A lot of movies which have high average ratings have larger number of votes. 
+    
+
+
+
+####10) Compare average votes for different genres
+
+```{r echo=FALSE}
+byGenres <- movie_for_genres %>% 
+  group_by(genres) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+ggplot(byGenres, aes(reorder(genres, -AvgVotes), AvgVotes)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Genres", y = "Average Votes per Movie", title = "Average Votes by Genre ")
+```
+
+    Top3: Adventure, Sci-Fi and Action movies
+    So, audiences who watch Adventure, Sci-Fi and Action have the tendency, or are more willingly, to write online review and rate the movie online
+    
+
+
+
+####11) Is there any voting behavior trend across year?
+
+```{r echo=FALSE}
+byYear <- movie_for_genres %>% 
+  group_by(releaseYear) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+ggplot(byYear, aes(reorder(releaseYear, -AvgVotes), AvgVotes)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Release Year", y = "Average Votes", title = "Average Votes by Year")
+```
+    
+    There is a decreasing trend of votings for movies throughout year 2013-2017.
+    
+
+
+####12) Find average votings by genres by year
+    
+```{r echo=FALSE, fig.align=13, fig.height=8, fig.width=13}
+# Time series
+byYear_Genres <- movie_for_genres %>% 
+  group_by(genres, releaseYear) %>% 
+  summarize(TotalCount = n(), TotalVotes = sum(numVotes), AvgVotes = mean(numVotes), AvgRate = mean(averageRating))
+
+byYear_Genres <- as.data.frame(byYear_Genres)
+byYear_Genres$genres <- factor(byYear_Genres$genres)
+byYear_Genres$releaseYear <- factor(byYear_Genres$releaseYear)
+
+ggplot(byYear_Genres, aes(x = releaseYear, y = AvgVotes, colour = genres, group = genres)) + 
+  geom_line() +
+  labs(x = "Release Year", y = "Average Votes", title = "Annual flows of Average Votes for Movies under 25 Genres")
+
+# Together
+ggplot(byYear_Genres, aes(x = releaseYear, y = AvgVotes, group = genres)) + # , colour = genres
+  geom_line() +
+  theme(legend.position = "none") +
+  facet_wrap(~genres) +
+  labs(x = "Release Year", y = "Average Votes", title = "Annual flows of Average Votes for Movies under 25 Genres")
+```
+
+    Top 3 genres which have the largest average amount of votes per movie were still Adventure, Sci-Fi and Action until 2016.
+    In 2017, with a generally decreasing trend on online voting, Fantasy became the genre which had the largest average amount of votes per movie, beating Adventure, Sci-Fi and Action.
+    
+    
+#6.Interactive Component
+    
+  This link is the number of votes and average rating by genres by Shiny: 
+<https://shayuhan.shinyapps.io/genres/>
+
+  
+  This link is a wordcloud by Shiny: 
+<https://shayuhan.shinyapps.io/WordCloud/>
+
+
+  The source code of both of Shiny result you could find at at:
+<https://github.com/shayuhan/EDAV/>
+
+
+    The interactive graph shows that:
+    1. Movie Beauty and the Beast is the reason causing the average amount of votes per movie under Musical genre reaching a peak. Its number of votes is about 200 times than the rest of movies, and the rating is above 7.00, which is fairly good. 
+    2. Wonder Woman and Star Wars: the Last Jedi are in the leading position and their average rating is about 7.5, which shows a positive feedback and affection from audience. 
+    3. Interstellar and Guardians of the Galaxy were the winner in 2014 under Sci-fi genre, receiving both largest number of votes and highest rating, as high as 8. 
+    4. Similarly, Adventure genre shared the same winner in 2014, Interstellar and Guardians of the Galaxy. In 2015, Star Wars: The Force Awakens and Mad Max had the largest number of votes, but interestingly, Inside Out achieved the highest rating overall, with only two thirds of vote amount of the former. 
+    5. The Lone Ranger had an extremely large amount of votes, but a relatively poor rating. There might be stories behind such contradiction.
+    6. Even though it is outnumbered by Star Wars and Mad Max under Adventure genre, Inside Out had no competitors within Animation movies. Moreover, Inside Out maintain its top rating overall. 
+    In conclusion, movies that have been highlighted above should be paid more attention to, since they are successful cases in movie production and worth further analysis. Generally, movies which collect large number of votes are evaluated with higher rating. Particularly, Marvels and Star Wars series maintain their attractions to audience. People who are interested in specific genre could focus more on analyzing the corresponding movies highlighted above. 
+    
+#7.Conclusion
+
+    Limitations: We do not have many years to make comparition. 
+    Future direction: From perspective of producer, we could compare certain genre's ticket sales across different region. Then, we could increase the showings in the regions with high ticket sales. We could comparing with more years to get more reliable monthly pattern of ticket sales, so that we could know when is the best time for us to release movie. In the meantime, we may need to pay attention to monthly pattern of release amount of different genres. In case we would face with too much competitors, we could try to avoid the peak release time of the genre of ours.
+    Lesson learned: We should find more data source at the very beginning of the project, because sometimes we need to combine more information from different source. Single data source is not enough.
